@@ -120,7 +120,7 @@ function updatePlayersDisplay() {
 
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name + " — " + tickets + " ticket(s)";
+    option.textContent = name + " â " + tickets + " ticket(s)";
     el.playerSelect.appendChild(option);
   });
 
@@ -231,10 +231,14 @@ function buildVisualSegments() {
 
   names.forEach((name, playerIndex) => {
     const tickets = players[name];
-
     const oddsPercent = totalTickets > 0 ? (tickets / totalTickets) * 100 : 0;
+
     let chunkCount = 1;
 
+    // IMPORTANT:
+    // Under 8% MUST stay as one single visual chunk.
+    // 8% to 19.99% can use two chunks.
+    // 20%+ can use three chunks.
     if (names.length > 1 && oddsPercent >= 20) {
       chunkCount = 3;
     } else if (names.length > 1 && oddsPercent >= 8) {
@@ -253,100 +257,99 @@ function buildVisualSegments() {
       chunks.push({
         name: name,
         weight: baseWeight + extra,
-        group: i,
-        playerIndex: playerIndex
+        oddsPercent: oddsPercent,
+        playerIndex: playerIndex,
+        chunkIndex: i,
+        isSmall: oddsPercent < 8
       });
     }
   });
 
-  const spread = [];
-  const remaining = chunks.slice();
+  // Put bigger chunks down first, then insert small chunks into the best gaps.
+  const largeChunks = chunks.filter(chunk => !chunk.isSmall).sort((a, b) => {
+    if (b.weight !== a.weight) return b.weight - a.weight;
+    return a.playerIndex - b.playerIndex;
+  });
 
-  while (remaining.length) {
-    let bestIndex = 0;
+  const smallChunks = chunks.filter(chunk => chunk.isSmall).sort((a, b) => {
+    if (b.weight !== a.weight) return b.weight - a.weight;
+    return a.playerIndex - b.playerIndex;
+  });
+
+  const arranged = [];
+
+  function getNeighbors(list, spot) {
+    if (!list.length) {
+      return { left: null, right: null };
+    }
+
+    return {
+      left: list[(spot - 1 + list.length) % list.length] || null,
+      right: list[spot % list.length] || null
+    };
+  }
+
+  function placeChunk(chunk) {
+    if (!arranged.length) {
+      arranged.push(chunk);
+      return;
+    }
+
+    let bestSpot = 0;
     let bestScore = -Infinity;
 
-    for (let i = 0; i < remaining.length; i++) {
-      const candidate = remaining[i];
+    for (let spot = 0; spot <= arranged.length; spot++) {
+      const { left, right } = getNeighbors(arranged, spot);
+      let score = 0;
 
-      let score = candidate.weight;
+      if (left && left.name === chunk.name) score -= 100000;
+      if (right && right.name === chunk.name) score -= 100000;
 
-      const last1 = spread[spread.length - 1];
-      const last2 = spread[spread.length - 2];
+      // Under-8% chunks should not sit beside other under-8% chunks if possible.
+      if (chunk.isSmall && left && left.isSmall) score -= 50000;
+      if (chunk.isSmall && right && right.isSmall) score -= 50000;
 
-      if (last1 && last1.name === candidate.name) score -= totalTickets * 2;
-      if (last2 && last2.name === candidate.name) score -= totalTickets;
+      // Under-8% chunks prefer being between bigger chunks.
+      if (chunk.isSmall && left && !left.isSmall) score += 3000;
+      if (chunk.isSmall && right && !right.isSmall) score += 3000;
 
-      score += Math.random() * Math.max(1, totalTickets * 0.01);
+      // Spread chunks from the same player far apart.
+      let nearestSameDistance = arranged.length + 1;
+
+      arranged.forEach((existing, existingIndex) => {
+        if (existing.name !== chunk.name) return;
+
+        const rawDistance = Math.abs(existingIndex - spot);
+        const circularDistance = Math.min(rawDistance, arranged.length - rawDistance);
+        nearestSameDistance = Math.min(nearestSameDistance, circularDistance);
+      });
+
+      score += nearestSameDistance * 500;
+
+      // Prefer bigger neighbors so small chunks get tucked into clean gaps.
+      if (left) score += left.weight * 0.25;
+      if (right) score += right.weight * 0.25;
+
+      score += Math.random();
 
       if (score > bestScore) {
         bestScore = score;
-        bestIndex = i;
+        bestSpot = spot;
       }
     }
 
-    spread.push(remaining.splice(bestIndex, 1)[0]);
+    arranged.splice(bestSpot, 0, chunk);
   }
 
-  return spread;
+  largeChunks.forEach(placeChunk);
+  smallChunks.forEach(placeChunk);
+
+  return arranged;
 }
 
 function getDisplayTarget(winnerName) {
   const segments = buildVisualSegments();
   const matchingIndexes = [];
-
-  segments.forEach((segment, index) => {
-    if (segment.name === winnerName) matchingIndexes.push(index);
-  });
-
-  const targetIndex = matchingIndexes.length
-    ? matchingIndexes[Math.floor(Math.random() * matchingIndexes.length)]
-    : 0;
-
-  let totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
-  let startPercent = 0;
-
-  for (let i = 0; i < targetIndex; i++) {
-    startPercent += segments[i].weight / totalWeight;
-  }
-
-  const targetSegment = segments[targetIndex] || segments[0];
-  const targetPercent = startPercent + ((targetSegment.weight / totalWeight) / 2);
-
-  return {
-    segments,
-    targetPercent
-  };
-}
-
-function drawWheel(segments = buildVisualSegments()) {
-  const canvas = el.wheelCanvas;
-  const ctx = canvas.getContext("2d");
-  const center = canvas.width / 2;
-  const radius = center - 18;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  if (!segments.length) {
-    ctx.fillStyle = "#333";
-    ctx.beginPath();
-    ctx.arc(center, center, radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(255,255,255,.35)";
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(center, center, 18, 0, Math.PI * 2);
-    ctx.fill();
-    return;
-  }
-
-  const totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
-  const highTicketMode = totalTickets > 500;
-  let start = -Math.PI / 2 + (wheelRotation * Math.PI) / 180;
 
   segments.forEach((segment, index) => {
     const angle = (segment.weight / totalWeight) * Math.PI * 2;
@@ -358,12 +361,16 @@ function drawWheel(segments = buildVisualSegments()) {
     ctx.fillStyle = playerColors[segment.name] || "#888";
     ctx.fill();
 
-    const nextSegment = segments[(index + 1) % segments.length];
+    // Under-8% players are one solid chunk.
+    // No inner stroke on them, so they do not look like 2-3 thin lines.
+    if (!segment.isSmall) {
+      const nextSegment = segments[(index + 1) % segments.length];
 
-    if (!nextSegment || nextSegment.name !== segment.name) {
-      ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.12)" : "rgba(0,0,0,.08)";
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
+      if (!nextSegment || nextSegment.name !== segment.name) {
+        ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.10)" : "rgba(0,0,0,.06)";
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
     }
 
     start += angle;
@@ -453,7 +460,7 @@ function spinWheel() {
 }
 
 function addHistory(winnerName) {
-  const entry = "Draw #" + (history.length + 1) + " — " + winnerName + " won | Prize: " + getPrizeText();
+  const entry = "Draw #" + (history.length + 1) + " â " + winnerName + " won | Prize: " + getPrizeText();
   history.unshift(entry);
   saveJSON(keys.history, history);
   updateHistoryDisplay();
