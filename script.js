@@ -28,18 +28,19 @@ let entriesLocked = false;
 let lastWinner = "";
 
 const $ = (id) => document.getElementById(id);
-
 const el = {};
 
 function cacheElements() {
-  [
-    "adminLogin", "adminCodeInput", "adminStatus", "adminPanel", "webhookInput",
-    "webhookStatus", "embedTitleInput", "embedFooterInput", "embedImageInput",
-    "patchModal", "prizeAmountInput", "prizeItemInput", "playerNameInput",
-    "ticketAmountInput", "playerSelect", "playersList", "lockStatus",
-    "lockEntriesBtn", "winnerText", "winnerCard", "winnerName", "winnerPrize",
-    "historyList", "wheelCanvas"
-  ].forEach((id) => {
+  const ids = [
+    "adminLogin", "adminCodeInput", "adminStatus", "adminPanel",
+    "webhookInput", "webhookStatus", "embedTitleInput", "embedFooterInput",
+    "embedImageInput", "patchModal", "prizeAmountInput", "prizeItemInput",
+    "playerNameInput", "ticketAmountInput", "playerSelect", "playersList",
+    "lockStatus", "lockEntriesBtn", "winnerText", "winnerCard",
+    "winnerName", "winnerPrize", "historyList", "wheelCanvas"
+  ];
+
+  ids.forEach((id) => {
     el[id] = $(id);
   });
 }
@@ -52,7 +53,7 @@ function loadJSON(key, fallback) {
   try {
     const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved) : fallback;
-  } catch {
+  } catch (error) {
     return fallback;
   }
 }
@@ -120,7 +121,7 @@ function updatePlayersDisplay() {
 
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name + " â " + tickets + " ticket(s)";
+    option.textContent = name + " - " + tickets + " ticket(s)";
     el.playerSelect.appendChild(option);
   });
 
@@ -130,7 +131,7 @@ function updatePlayersDisplay() {
         <span class="color" style="background:#ffcc00"></span>
         <div>
           <strong>Visual Wheel</strong>
-          <small>Each player shows as up to 3 chunks. Odds still use real tickets.</small>
+          <small>Under 8% = one chunk. Odds still use real tickets.</small>
         </div>
         <div class="percent">FAIR</div>
       </div>
@@ -161,7 +162,7 @@ function addPlayer() {
 
   savePlayers();
   updatePlayersDisplay();
-  drawWheel();
+  buildWheel();
 }
 
 function removePlayer() {
@@ -171,6 +172,7 @@ function removePlayer() {
   }
 
   const selected = el.playerSelect.value;
+
   if (!selected || !players[selected]) {
     alert("Select a player first.");
     return;
@@ -181,7 +183,7 @@ function removePlayer() {
 
   savePlayers();
   updatePlayersDisplay();
-  drawWheel();
+  buildWheel();
 }
 
 function setLockState() {
@@ -213,8 +215,8 @@ function getWeightedWinner() {
   const total = Object.values(players).reduce((sum, tickets) => sum + tickets, 0);
   let roll = Math.floor(Math.random() * total) + 1;
 
-  for (const [name, tickets] of Object.entries(players)) {
-    roll -= tickets;
+  for (const name of Object.keys(players)) {
+    roll -= players[name];
     if (roll <= 0) return name;
   }
 
@@ -227,18 +229,14 @@ function buildVisualSegments() {
 
   if (!names.length || !totalTickets) return [];
 
-  const chunks = [];
+  const allChunks = [];
 
   names.forEach((name, playerIndex) => {
     const tickets = players[name];
-    const oddsPercent = totalTickets > 0 ? (tickets / totalTickets) * 100 : 0;
+    const oddsPercent = (tickets / totalTickets) * 100;
 
     let chunkCount = 1;
 
-    // IMPORTANT:
-    // Under 8% MUST stay as one single visual chunk.
-    // 8% to 19.99% can use two chunks.
-    // 20%+ can use three chunks.
     if (names.length > 1 && oddsPercent >= 20) {
       chunkCount = 3;
     } else if (names.length > 1 && oddsPercent >= 8) {
@@ -254,38 +252,38 @@ function buildVisualSegments() {
       const extra = leftover > 0 ? 1 : 0;
       leftover -= extra;
 
-      chunks.push({
+      allChunks.push({
         name: name,
         weight: baseWeight + extra,
         oddsPercent: oddsPercent,
-        playerIndex: playerIndex,
-        chunkIndex: i,
-        isSmall: oddsPercent < 8
+        isSmall: oddsPercent < 8,
+        playerIndex: playerIndex
       });
     }
   });
 
-  // Put bigger chunks down first, then insert small chunks into the best gaps.
-  const largeChunks = chunks.filter(chunk => !chunk.isSmall).sort((a, b) => {
-    if (b.weight !== a.weight) return b.weight - a.weight;
-    return a.playerIndex - b.playerIndex;
-  });
+  const largeChunks = allChunks
+    .filter((chunk) => !chunk.isSmall)
+    .sort((a, b) => {
+      if (b.weight !== a.weight) return b.weight - a.weight;
+      return a.playerIndex - b.playerIndex;
+    });
 
-  const smallChunks = chunks.filter(chunk => chunk.isSmall).sort((a, b) => {
-    if (b.weight !== a.weight) return b.weight - a.weight;
-    return a.playerIndex - b.playerIndex;
-  });
+  const smallChunks = allChunks
+    .filter((chunk) => chunk.isSmall)
+    .sort((a, b) => {
+      if (b.weight !== a.weight) return b.weight - a.weight;
+      return a.playerIndex - b.playerIndex;
+    });
 
   const arranged = [];
 
-  function getNeighbors(list, spot) {
-    if (!list.length) {
-      return { left: null, right: null };
-    }
+  function getNeighbors(spot) {
+    if (!arranged.length) return { left: null, right: null };
 
     return {
-      left: list[(spot - 1 + list.length) % list.length] || null,
-      right: list[spot % list.length] || null
+      left: arranged[(spot - 1 + arranged.length) % arranged.length] || null,
+      right: arranged[spot % arranged.length] || null
     };
   }
 
@@ -299,21 +297,20 @@ function buildVisualSegments() {
     let bestScore = -Infinity;
 
     for (let spot = 0; spot <= arranged.length; spot++) {
-      const { left, right } = getNeighbors(arranged, spot);
+      const neighbors = getNeighbors(spot);
+      const left = neighbors.left;
+      const right = neighbors.right;
       let score = 0;
 
       if (left && left.name === chunk.name) score -= 100000;
       if (right && right.name === chunk.name) score -= 100000;
 
-      // Under-8% chunks should not sit beside other under-8% chunks if possible.
       if (chunk.isSmall && left && left.isSmall) score -= 50000;
       if (chunk.isSmall && right && right.isSmall) score -= 50000;
 
-      // Under-8% chunks prefer being between bigger chunks.
       if (chunk.isSmall && left && !left.isSmall) score += 3000;
       if (chunk.isSmall && right && !right.isSmall) score += 3000;
 
-      // Spread chunks from the same player far apart.
       let nearestSameDistance = arranged.length + 1;
 
       arranged.forEach((existing, existingIndex) => {
@@ -326,7 +323,6 @@ function buildVisualSegments() {
 
       score += nearestSameDistance * 500;
 
-      // Prefer bigger neighbors so small chunks get tucked into clean gaps.
       if (left) score += left.weight * 0.25;
       if (right) score += right.weight * 0.25;
 
@@ -352,6 +348,59 @@ function getDisplayTarget(winnerName) {
   const matchingIndexes = [];
 
   segments.forEach((segment, index) => {
+    if (segment.name === winnerName) matchingIndexes.push(index);
+  });
+
+  const targetIndex = matchingIndexes.length
+    ? matchingIndexes[Math.floor(Math.random() * matchingIndexes.length)]
+    : 0;
+
+  const totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
+  let startPercent = 0;
+
+  for (let i = 0; i < targetIndex; i++) {
+    startPercent += segments[i].weight / totalWeight;
+  }
+
+  const targetSegment = segments[targetIndex] || segments[0];
+  const targetPercent = startPercent + ((targetSegment.weight / totalWeight) / 2);
+
+  return {
+    segments: segments,
+    targetPercent: targetPercent
+  };
+}
+
+function drawWheel(segments = buildVisualSegments()) {
+  const canvas = el.wheelCanvas;
+  const ctx = canvas.getContext("2d");
+  const center = canvas.width / 2;
+  const radius = center - 18;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!segments.length) {
+    ctx.fillStyle = "#333";
+    ctx.beginPath();
+    ctx.arc(center, center, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,.35)";
+    ctx.lineWidth = 10;
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(center, center, 18, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  const totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
+  const highTicketMode = totalTickets > 500;
+  let start = -Math.PI / 2 + (wheelRotation * Math.PI) / 180;
+
+  segments.forEach((segment) => {
     const angle = (segment.weight / totalWeight) * Math.PI * 2;
 
     ctx.beginPath();
@@ -361,16 +410,10 @@ function getDisplayTarget(winnerName) {
     ctx.fillStyle = playerColors[segment.name] || "#888";
     ctx.fill();
 
-    // Under-8% players are one solid chunk.
-    // No inner stroke on them, so they do not look like 2-3 thin lines.
     if (!segment.isSmall) {
-      const nextSegment = segments[(index + 1) % segments.length];
-
-      if (!nextSegment || nextSegment.name !== segment.name) {
-        ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.10)" : "rgba(0,0,0,.06)";
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-      }
+      ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.10)" : "rgba(0,0,0,.06)";
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
     }
 
     start += angle;
@@ -393,6 +436,7 @@ function getDisplayTarget(winnerName) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(String(totalTickets), center, center - 6);
+
     ctx.font = "bold 10px Arial";
     ctx.fillText("tickets", center, center + 12);
   }
@@ -460,7 +504,7 @@ function spinWheel() {
 }
 
 function addHistory(winnerName) {
-  const entry = "Draw #" + (history.length + 1) + " â " + winnerName + " won | Prize: " + getPrizeText();
+  const entry = "Draw #" + (history.length + 1) + " - " + winnerName + " won | Prize: " + getPrizeText();
   history.unshift(entry);
   saveJSON(keys.history, history);
   updateHistoryDisplay();
@@ -476,6 +520,7 @@ function updateHistoryDisplay() {
 
 function clearHistory() {
   if (!confirm("Clear saved draw history?")) return;
+
   history = [];
   saveJSON(keys.history, history);
   updateHistoryDisplay();
@@ -534,6 +579,7 @@ function saveEmbedSettings() {
   localStorage.setItem(keys.embedTitle, el.embedTitleInput.value.trim() || "Minecraft Lottery Result");
   localStorage.setItem(keys.embedFooter, el.embedFooterInput.value.trim() || "Lottery Wheel");
   localStorage.setItem(keys.embedImage, el.embedImageInput.value.trim());
+
   el.webhookStatus.textContent = "Embed settings saved.";
 }
 
@@ -547,6 +593,7 @@ function getEmbedSettings() {
 
 function makeEmbed(title, fields) {
   const settings = getEmbedSettings();
+
   const embed = {
     title: title || settings.title,
     color: 16734751,
@@ -577,8 +624,10 @@ async function sendWebhookEmbed(embed, successText) {
       body: JSON.stringify({ username: "Lottery Wheel", embeds: [embed] })
     });
 
-    el.webhookStatus.textContent = response.ok || response.status === 204 ? successText : "Discord send failed.";
-  } catch {
+    el.webhookStatus.textContent = response.ok || response.status === 204
+      ? successText
+      : "Discord send failed.";
+  } catch (error) {
     el.webhookStatus.textContent = "Could not send. Check webhook or internet.";
   }
 }
@@ -652,6 +701,7 @@ function logoutAdmin() {
 
 function checkAdmin() {
   el.adminPanel.style.display = localStorage.getItem(keys.admin) === "true" ? "block" : "none";
+
   if (el.adminPanel.style.display === "block") {
     loadWebhook();
     loadEmbedSettings();
@@ -666,12 +716,12 @@ function hidePatchNotes() {
   el.patchModal.style.display = "none";
 }
 
-
 function applyTheme(theme) {
   document.body.classList.toggle("lightMode", theme === "light");
   localStorage.setItem(keys.theme, theme);
 
   const themeBtn = $("themeToggleBtn");
+
   if (themeBtn) {
     themeBtn.textContent = theme === "light" ? "Dark Mode" : "Light Mode";
   }
@@ -688,8 +738,9 @@ function toggleTheme() {
 }
 
 function bindEvents() {
+  const themeButton = $("themeToggleBtn");
+
   $("adminToolsBtn").addEventListener("click", showAdminLogin);
-  $("themeToggleBtn").addEventListener("click", toggleTheme);
   $("closeAdminLoginBtn").addEventListener("click", hideAdminLogin);
   $("adminLoginBtn").addEventListener("click", loginAdmin);
   $("adminLogoutBtn").addEventListener("click", logoutAdmin);
@@ -707,6 +758,10 @@ function bindEvents() {
   $("spinWheelBtn").addEventListener("click", spinWheel);
   $("clearAllBtn").addEventListener("click", clearAll);
   $("clearHistoryBtn").addEventListener("click", clearHistory);
+
+  if (themeButton) {
+    themeButton.addEventListener("click", toggleTheme);
+  }
 }
 
 function startApp() {
