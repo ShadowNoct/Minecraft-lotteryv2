@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minecraft Lottery Wheel V2</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="adminLogin" class="modal">
+    <div class="modalBox">
+      <div class="modalHead">
+        <h2>Admin Login</h2>
+        <button class="smallBtn" id="closeAdminLoginBtn">Close</button>
+      </div>
+      <input id="adminCodeInput" type="password" placeholder="Admin code" />
+      <button id="adminLoginBtn">Login</button>
+      <p id="adminStatus" class="statusText"></p>
+    </div>
+  </div>
+
+  <div id="patchModal" class="modal">
+    <div class="modalBox">
+      <div class="modalHead">
+        <h2>Patch Notes</h2>
+        <button class="smallBtn" id="closePatchBtn">Close</button>
+      </div>
+      <div class="versionPill">v2.0.1</div>
+      <div class="patchItem"><b>No spin popup</b><br>The wheel now spins immediately when you tap Spin Wheel.</div>
+      <div class="patchItem"><b>Theme toggle</b><br>Added a Light Mode / Dark Mode button and saved theme preference.</div>
+      <div class="patchItem"><b>Chunk display</b><br>Wheel keeps the cleaner chunk display while odds still use real tickets.</div>
+    </div>
+  </div>
+
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <h1>Minecraft Lottery Wheel</h1>
+        <p class="sub">StoneHaven lottery dashboard</p>
+      </div>
+      <div class="headerRight">
+        <div class="versionPill">v2.0.1</div>
+        <button class="themeBtn" id="themeToggleBtn">Light Mode</button>
+        <button class="patchBtn" id="patchBtn">Patch Notes</button>
+        <button class="adminToolsBtn" id="adminToolsBtn">Admin Tools</button>
+      </div>
+    </header>
+
+    <section id="adminPanel" class="card adminPanel">
+      <div class="sectionHead">
+        <div>
+          <h2>Admin Tools</h2>
+          <p>Webhook and embed settings save only on this device/browser.</p>
+        </div>
+        <button class="smallBtn danger" id="adminLogoutBtn">Logout</button>
+      </div>
+
+      <div class="adminGrid">
+        <div class="adminBox">
+          <h3>Webhook</h3>
+          <input id="webhookInput" type="text" placeholder="Discord webhook URL" />
+          <button class="discord" id="saveWebhookBtn">Save Webhook</button>
+          <p id="webhookStatus" class="statusText"></p>
+        </div>
+
+        <div class="adminBox">
+          <h3>Embed Settings</h3>
+          <input id="embedTitleInput" type="text" placeholder="Embed title" />
+          <input id="embedFooterInput" type="text" placeholder="Embed footer" />
+          <input id="embedImageInput" type="text" placeholder="Embed image URL" />
+          <button id="saveEmbedBtn">Save Embed Settings</button>
+        </div>
+
+        <div class="adminBox">
+          <h3>Discord Actions</h3>
+          <button class="discord" id="sendOpenBtn">Send Lottery Open</button>
+          <button class="discord" id="sendLockedBtn">Send Entries Locked</button>
+          <button class="discord" id="sendResultBtn">Send Results to Discord</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <aside>
+        <section class="card">
+          <h2>Lottery Prize</h2>
+          <div class="inputStack">
+            <input id="prizeAmountInput" type="number" placeholder="Prize amount" />
+            <input id="prizeItemInput" type="text" placeholder="Prize item" value="Gold" />
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Add Players</h2>
+          <p>Add a player and how many tickets they have.</p>
+          <div class="inputStack">
+            <input id="playerNameInput" type="text" placeholder="Player name" />
+            <input id="ticketAmountInput" type="number" placeholder="Ticket amount" />
+            <button id="addPlayerBtn">Add / Update Player</button>
+            <select id="playerSelect">
+              <option>No players added yet</option>
+            </select>
+            <button class="danger" id="removePlayerBtn">Remove Selected</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="card wheelCard">
+        <div class="actionGrid">
+          <button id="buildWheelBtn">Build Wheel</button>
+          <button class="secondary" id="lockEntriesBtn">Lock Entries</button>
+          <button id="spinWheelBtn">Spin Wheel</button>
+          <button class="danger" id="clearAllBtn">Clear Everything</button>
+        </div>
+
+        <p id="lockStatus" class="statusText"></p>
+
+        <div class="wheelWrap">
+          <div class="pointer"></div>
+          <canvas id="wheelCanvas" width="500" height="500"></canvas>
+        </div>
+
+        <h2 id="winnerText"></h2>
+
+        <section id="winnerCard" class="winnerBox">
+          <span>WINNER</span>
+          <h2 id="winnerName">No winner yet</h2>
+          <p id="winnerPrize">Prize not set</p>
+        </section>
+      </section>
+
+      <aside>
+        <section class="card">
+          <h2>Players & Odds</h2>
+          <div id="playersList" class="list">No players added yet.</div>
+        </section>
+
+        <section class="card">
+          <div class="sectionHead">
+            <h2>Draw History</h2>
+            <button class="smallBtn danger" id="clearHistoryBtn">Clear</button>
+          </div>
+          <div id="historyList" class="historyBox">Draw history will show here.</div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
