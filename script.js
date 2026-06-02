@@ -7,7 +7,8 @@ const keys = {
   embedTitle: "lotteryV2EmbedTitle",
   embedFooter: "lotteryV2EmbedFooter",
   embedImage: "lotteryV2EmbedImage",
-  admin: "lotteryV2Admin"
+  admin: "lotteryV2Admin",
+  theme: "lotteryV2Theme"
 };
 
 const colors = [
@@ -231,15 +232,12 @@ function buildVisualSegments() {
   names.forEach((name, playerIndex) => {
     const tickets = players[name];
 
-    const oddsPercent = totalTickets > 0 ? (tickets / totalTickets) * 100 : 0;
     let chunkCount = 1;
 
-    if (names.length > 1 && oddsPercent >= 20) {
+    if (names.length > 1 && tickets >= 3) {
       chunkCount = 3;
-    } else if (names.length > 1 && oddsPercent >= 8) {
+    } else if (names.length > 1 && tickets === 2) {
       chunkCount = 2;
-    } else {
-      chunkCount = 1;
     }
 
     const baseWeight = Math.floor(tickets / chunkCount);
@@ -400,14 +398,6 @@ function spinWheel() {
     alert("Add players first.");
     return;
   }
-
-  const message =
-    "Start lottery draw?\n\n" +
-    "Prize: " + getPrizeText() + "\n" +
-    "Players: " + Object.keys(players).length + "\n" +
-    "Total tickets: " + totalTickets;
-
-  if (!confirm(message)) return;
 
   spinning = true;
   el.winnerText.textContent = "";
@@ -662,8 +652,30 @@ function hidePatchNotes() {
   el.patchModal.style.display = "none";
 }
 
+
+function applyTheme(theme) {
+  document.body.classList.toggle("lightMode", theme === "light");
+  localStorage.setItem(keys.theme, theme);
+
+  const themeBtn = $("themeToggleBtn");
+  if (themeBtn) {
+    themeBtn.textContent = theme === "light" ? "Dark Mode" : "Light Mode";
+  }
+}
+
+function loadTheme() {
+  const savedTheme = localStorage.getItem(keys.theme) || "dark";
+  applyTheme(savedTheme);
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.contains("lightMode");
+  applyTheme(isLight ? "dark" : "light");
+}
+
 function bindEvents() {
   $("adminToolsBtn").addEventListener("click", showAdminLogin);
+  $("themeToggleBtn").addEventListener("click", toggleTheme);
   $("closeAdminLoginBtn").addEventListener("click", hideAdminLogin);
   $("adminLoginBtn").addEventListener("click", loginAdmin);
   $("adminLogoutBtn").addEventListener("click", logoutAdmin);
@@ -685,6 +697,7 @@ function bindEvents() {
 
 function startApp() {
   cacheElements();
+  loadTheme();
 
   el.adminLogin.style.display = "none";
   el.patchModal.style.display = "none";
