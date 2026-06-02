@@ -232,12 +232,15 @@ function buildVisualSegments() {
   names.forEach((name, playerIndex) => {
     const tickets = players[name];
 
+    const oddsPercent = totalTickets > 0 ? (tickets / totalTickets) * 100 : 0;
     let chunkCount = 1;
 
-    if (names.length > 1 && tickets >= 3) {
+    if (names.length > 1 && oddsPercent >= 20) {
       chunkCount = 3;
-    } else if (names.length > 1 && tickets === 2) {
+    } else if (names.length > 1 && oddsPercent >= 8) {
       chunkCount = 2;
+    } else {
+      chunkCount = 1;
     }
 
     const baseWeight = Math.floor(tickets / chunkCount);
@@ -345,7 +348,7 @@ function drawWheel(segments = buildVisualSegments()) {
   const highTicketMode = totalTickets > 500;
   let start = -Math.PI / 2 + (wheelRotation * Math.PI) / 180;
 
-  segments.forEach((segment) => {
+  segments.forEach((segment, index) => {
     const angle = (segment.weight / totalWeight) * Math.PI * 2;
 
     ctx.beginPath();
@@ -355,9 +358,13 @@ function drawWheel(segments = buildVisualSegments()) {
     ctx.fillStyle = playerColors[segment.name] || "#888";
     ctx.fill();
 
-    ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.2)" : "rgba(0,0,0,.12)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    const nextSegment = segments[(index + 1) % segments.length];
+
+    if (!nextSegment || nextSegment.name !== segment.name) {
+      ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.12)" : "rgba(0,0,0,.08)";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
 
     start += angle;
   });
