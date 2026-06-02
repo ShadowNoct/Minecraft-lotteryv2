@@ -123,15 +123,15 @@ function updatePlayersDisplay() {
     el.playerSelect.appendChild(option);
   });
 
-  if (totalTickets > 500) {
+  if (totalTickets > 0) {
     html += `
       <div class="row">
         <span class="color" style="background:#ffcc00"></span>
         <div>
-          <strong>High Ticket Display</strong>
-          <small>Spread visual chunks shown. Odds still use real tickets.</small>
+          <strong>Visual Wheel</strong>
+          <small>Each player shows as up to 3 chunks. Odds still use real tickets.</small>
         </div>
-        <div class="percent">ON</div>
+        <div class="percent">FAIR</div>
       </div>
     `;
   }
@@ -226,69 +226,92 @@ function buildVisualSegments() {
 
   if (!names.length || !totalTickets) return [];
 
-  const visualCount = totalTickets > 500 ? (totalTickets > 1800 ? 96 : 80) : totalTickets;
-  const targets = {};
-  let used = 0;
+  const chunks = [];
 
-  names.forEach((name) => {
-    const raw = (players[name] / totalTickets) * visualCount;
-    targets[name] = Math.max(1, Math.floor(raw));
-    used += targets[name];
+  names.forEach((name, playerIndex) => {
+    const tickets = players[name];
+
+    let chunkCount = 1;
+
+    if (names.length > 1 && tickets >= 3) {
+      chunkCount = 3;
+    } else if (names.length > 1 && tickets === 2) {
+      chunkCount = 2;
+    }
+
+    const baseWeight = Math.floor(tickets / chunkCount);
+    let leftover = tickets % chunkCount;
+
+    for (let i = 0; i < chunkCount; i++) {
+      const extra = leftover > 0 ? 1 : 0;
+      leftover -= extra;
+
+      chunks.push({
+        name: name,
+        weight: baseWeight + extra,
+        group: i,
+        playerIndex: playerIndex
+      });
+    }
   });
 
-  while (used < visualCount) {
-    const ranked = names.slice().sort((a, b) => players[b] - players[a]);
-    const name = ranked[used % ranked.length];
-    targets[name]++;
-    used++;
-  }
+  const spread = [];
+  const remaining = chunks.slice();
 
-  while (used > visualCount) {
-    const name = Object.keys(targets).sort((a, b) => targets[b] - targets[a])[0];
-    if (targets[name] <= 1) break;
-    targets[name]--;
-    used--;
-  }
+  while (remaining.length) {
+    let bestIndex = 0;
+    let bestScore = -Infinity;
 
-  const remaining = { ...targets };
-  const output = [];
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i];
 
-  for (let i = 0; i < visualCount; i++) {
-    let best = null;
-    let score = -Infinity;
+      let score = candidate.weight;
 
-    names.forEach((name) => {
-      if (remaining[name] <= 0) return;
+      const last1 = spread[spread.length - 1];
+      const last2 = spread[spread.length - 2];
 
-      let currentScore = remaining[name] / targets[name];
-      if (output[output.length - 1] === name) currentScore -= 2.5;
-      if (output[output.length - 2] === name) currentScore -= 1.5;
-      currentScore += Math.random() * 0.2;
+      if (last1 && last1.name === candidate.name) score -= totalTickets * 2;
+      if (last2 && last2.name === candidate.name) score -= totalTickets;
 
-      if (currentScore > score) {
-        score = currentScore;
-        best = name;
+      score += Math.random() * Math.max(1, totalTickets * 0.01);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
       }
-    });
+    }
 
-    output.push(best);
-    remaining[best]--;
+    spread.push(remaining.splice(bestIndex, 1)[0]);
   }
 
-  return output;
+  return spread;
 }
 
 function getDisplayTarget(winnerName) {
   const segments = buildVisualSegments();
-  const matching = [];
+  const matchingIndexes = [];
 
-  segments.forEach((name, index) => {
-    if (name === winnerName) matching.push(index);
+  segments.forEach((segment, index) => {
+    if (segment.name === winnerName) matchingIndexes.push(index);
   });
+
+  const targetIndex = matchingIndexes.length
+    ? matchingIndexes[Math.floor(Math.random() * matchingIndexes.length)]
+    : 0;
+
+  let totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
+  let startPercent = 0;
+
+  for (let i = 0; i < targetIndex; i++) {
+    startPercent += segments[i].weight / totalWeight;
+  }
+
+  const targetSegment = segments[targetIndex] || segments[0];
+  const targetPercent = startPercent + ((targetSegment.weight / totalWeight) / 2);
 
   return {
     segments,
-    targetIndex: matching.length ? matching[Math.floor(Math.random() * matching.length)] : 0
+    targetPercent
   };
 }
 
@@ -317,23 +340,23 @@ function drawWheel(segments = buildVisualSegments()) {
     return;
   }
 
+  const totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
   const highTicketMode = totalTickets > 500;
-  const angle = (Math.PI * 2) / segments.length;
   let start = -Math.PI / 2 + (wheelRotation * Math.PI) / 180;
 
-  segments.forEach((name) => {
+  segments.forEach((segment) => {
+    const angle = (segment.weight / totalWeight) * Math.PI * 2;
+
     ctx.beginPath();
     ctx.moveTo(center, center);
     ctx.arc(center, center, radius, start, start + angle);
     ctx.closePath();
-    ctx.fillStyle = playerColors[name] || "#888";
+    ctx.fillStyle = playerColors[segment.name] || "#888";
     ctx.fill();
 
-    if (highTicketMode) {
-      ctx.strokeStyle = "rgba(0,0,0,.18)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    ctx.strokeStyle = highTicketMode ? "rgba(0,0,0,.2)" : "rgba(0,0,0,.12)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     start += angle;
   });
@@ -346,7 +369,7 @@ function drawWheel(segments = buildVisualSegments()) {
 
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  ctx.arc(center, center, highTicketMode ? 46 : 18, 0, Math.PI * 2);
+  ctx.arc(center, center, highTicketMode ? 46 : 22, 0, Math.PI * 2);
   ctx.fill();
 
   if (highTicketMode) {
@@ -390,10 +413,9 @@ function spinWheel() {
   const winnerName = getWeightedWinner();
   const result = getDisplayTarget(winnerName);
   const segments = result.segments;
-  const targetIndex = result.targetIndex;
+  const targetPercent = result.targetPercent;
 
-  const sliceDegrees = 360 / segments.length;
-  const targetAngle = targetIndex * sliceDegrees + sliceDegrees / 2;
+  const targetAngle = targetPercent * 360;
   const currentMod = ((wheelRotation % 360) + 360) % 360;
   const neededToTop = (360 - targetAngle - currentMod + 360) % 360;
 
