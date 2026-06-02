@@ -231,12 +231,15 @@ function buildVisualSegments() {
   names.forEach((name, playerIndex) => {
     const tickets = players[name];
 
+    const oddsPercent = totalTickets > 0 ? (tickets / totalTickets) * 100 : 0;
     let chunkCount = 1;
 
-    if (names.length > 1 && tickets >= 3) {
+    if (names.length > 1 && oddsPercent >= 20) {
       chunkCount = 3;
-    } else if (names.length > 1 && tickets === 2) {
+    } else if (names.length > 1 && oddsPercent >= 8) {
       chunkCount = 2;
+    } else {
+      chunkCount = 1;
     }
 
     const baseWeight = Math.floor(tickets / chunkCount);
